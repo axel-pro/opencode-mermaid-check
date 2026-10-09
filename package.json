@@ -9,13 +9,13 @@
     "gitlab",
     "lint"
   ],
-  "homepage": "https://github.com/<github-user>/opencode-mermaid-check#readme",
+  "homepage": "https://github.com/axel-pro/opencode-mermaid-check#readme",
   "bugs": {
-    "url": "https://github.com/<github-user>/opencode-mermaid-check/issues"
+    "url": "https://github.com/axel-pro/opencode-mermaid-check/issues"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/<github-user>/opencode-mermaid-check.git"
+    "url": "git+https://github.com/axel-pro/opencode-mermaid-check.git"
   },
   "license": "MIT",
   "author": "Mikhail Badin",
