@@ -1,0 +1,197 @@
+#!/usr/bin/env node
+// mermaid-check — checks that mermaid diagrams in Markdown files parse without errors.
+//
+// A broken diagram in GitLab shows up only as an error box instead of a picture. The script finds
+// ```mermaid blocks in .md files (and whole .mmd files), parses each one with the official mermaid
+// parser and prints errors with the line number in the file.
+// The OpenCode plugin of this package (src/index.ts) runs the check after every file edit by the agent.
+//
+// The check must accept exactly the syntax GitLab renders. GitLab 18.1 bundles mermaid 10.7.0: a diagram
+// written for a newer mermaid would pass the check but not render in GitLab. That is why package.json pins
+// mermaid 10.9.8, the latest release of the same 10.x line. It fixes the vulnerabilities of 10.7.0 and has
+// the same syntax, except block diagrams (block-beta, added in 10.8): the script rejects them itself,
+// see NEWER_THAN_GITLAB. After a GitLab upgrade, revisit the mermaid version and this list.
+// The mermaid version bundled with each GitLab release is in its package.json:
+// https://gitlab.com/gitlab-org/gitlab-foss
+//
+// Only syntax is checked: the script draws nothing, so it needs no browser. The mermaid parser needs
+// a DOM, which jsdom provides.
+"use strict";
+
+const { spawnSync } = require("node:child_process");
+const fs = require("node:fs");
+const path = require("node:path");
+
+// Diagram types that the mermaid from package.json already parses but GitLab does not render yet.
+const NEWER_THAN_GITLAB = {
+  "block-beta": "block diagrams were added in mermaid 10.8, while GitLab 18.1 renders with mermaid 10.7",
+};
+
+const USAGE = `Usage:
+  mermaid-check [file or directory ...]
+
+Checks \`\`\`mermaid blocks in .md files and whole .mmd files. Without arguments, checks all .md and .mmd
+files of the current git repository except those ignored by git. Directories are walked recursively.
+Exit codes: 0 — no errors; 1 — some diagrams have errors or a file could not be read; 2 — invalid usage.
+`;
+
+const EXTENSIONS = new Set([".md", ".mmd"]);
+const SKIP_DIRS = new Set([".git", "node_modules"]);
+
+function fail(message, code) {
+  process.stderr.write(`mermaid-check: ${message}\n`);
+  process.exit(code);
+}
+
+function walk(dir, found) {
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (entry.isDirectory()) {
+      if (!SKIP_DIRS.has(entry.name)) walk(path.join(dir, entry.name), found);
+    } else if (EXTENSIONS.has(path.extname(entry.name))) {
+      found.push(path.join(dir, entry.name));
+    }
+  }
+}
+
+function filesFromArgs(args) {
+  const found = [];
+  for (const arg of args) {
+    if (!fs.existsSync(arg)) fail(`${arg}: no such file or directory`, 2);
+    if (fs.statSync(arg).isDirectory()) walk(arg, found);
+    else found.push(arg);
+  }
+  return found;
+}
+
+// Without arguments, take the files git knows about: this skips node_modules and untracked junk.
+// The whole repository is checked even when the script runs from a subdirectory;
+// outside git, the current directory is checked.
+function repositoryFiles() {
+  const top = spawnSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8" });
+  const root = top.status === 0 ? top.stdout.trim() : process.cwd();
+  const git = spawnSync("git", ["ls-files", "--cached", "--others", "--exclude-standard", "-z", "--", "*.md", "*.mmd"], {
+    cwd: root,
+    encoding: "utf8",
+  });
+  if (git.status !== 0) {
+    const found = [];
+    walk(root, found);
+    return found;
+  }
+  return git.stdout
+    .split("\0")
+    .filter(Boolean)
+    .map((file) => path.relative(process.cwd(), path.join(root, file)) || file)
+    .filter((file) => fs.existsSync(file)); // git also lists files deleted but not yet committed
+}
+
+// ```mermaid (or ~~~mermaid) blocks from Markdown. line is the 1-based file line of the first diagram line.
+// Other code blocks are skipped entirely, so a ```mermaid example inside them is not treated as a diagram.
+function extractDiagrams(file, text) {
+  if (path.extname(file) === ".mmd") return [{ line: 1, source: text }];
+  const lines = text.split(/\r?\n/);
+  const diagrams = [];
+  for (let i = 0; i < lines.length; i++) {
+    const open = /^\s{0,3}(`{3,}|~{3,})\s*(\S*)/.exec(lines[i]);
+    if (!open) continue;
+    const fence = open[1];
+    const close = new RegExp(`^\\s{0,3}${fence[0]}{${fence.length},}\\s*$`);
+    let end = i + 1;
+    while (end < lines.length && !close.test(lines[end])) end++;
+    if (open[2] === "mermaid") diagrams.push({ line: i + 2, source: lines.slice(i + 1, end).join("\n") });
+    i = end;
+  }
+  return diagrams;
+}
+
+// The mermaid parser counts lines from the start of the diagram; convert to the file line.
+function describeError(error, diagram) {
+  const text = String(error?.message ?? error).trim();
+  const [first, ...rest] = text.split("\n");
+  const match = /on line (\d+)/.exec(first);
+  const line = match ? diagram.line + Number(match[1]) - 1 : diagram.line;
+  const details = rest
+    .filter((l) => l.trim())
+    .slice(0, 3)
+    .map((l) => `    ${l.length > 200 ? `${l.slice(0, 200)}…` : l}`);
+  return { line, message: [first.replace(/ on line \d+[.:]?/, ""), ...details].join("\n") };
+}
+
+// The diagram type is the first word of the first meaningful line, after front matter (--- … ---)
+// and %% directives. If GitLab does not render this type yet, returns an error for that line.
+function newerThanGitlab(diagram) {
+  const lines = diagram.source.split(/\r?\n/);
+  let i = 0;
+  while (i < lines.length && !lines[i].trim()) i++;
+  if (lines[i]?.trim() === "---") {
+    i++;
+    while (i < lines.length && lines[i].trim() !== "---") i++;
+    i++;
+  }
+  while (i < lines.length && (!lines[i].trim() || lines[i].trim().startsWith("%%"))) i++;
+  const type = lines[i]?.trim().split(/\s+/)[0];
+  const reason = Object.hasOwn(NEWER_THAN_GITLAB, type) ? NEWER_THAN_GITLAB[type] : undefined;
+  return reason && { line: diagram.line + i, message: `${type}: GitLab will not render this diagram — ${reason}` };
+}
+
+async function loadMermaid() {
+  // Some diagram parsers (block-beta, for example) print debug output via console.log. The script itself
+  // writes only to process.stdout and process.stderr, so console can be silenced entirely.
+  for (const method of ["log", "info", "debug", "warn", "trace"]) console[method] = () => {};
+  const { JSDOM } = require("jsdom");
+  const { window } = new JSDOM("<!doctype html><html><body></body></html>");
+  globalThis.window = window;
+  globalThis.document = window.document;
+  const { default: mermaid } = await import("mermaid");
+  mermaid.initialize({ startOnLoad: false });
+  return mermaid;
+}
+
+async function main() {
+  const args = process.argv.slice(2);
+  if (args.includes("-h") || args.includes("--help")) {
+    process.stdout.write(USAGE);
+    return 0;
+  }
+  const unknown = args.find((arg) => arg.startsWith("-"));
+  if (unknown) fail(`unknown option ${unknown}\n\n${USAGE}`, 2);
+
+  const files = args.length ? filesFromArgs(args) : repositoryFiles();
+  const mermaid = await loadMermaid();
+  let diagrams = 0;
+  let errors = 0;
+  for (const file of files) {
+    let text;
+    try {
+      text = fs.readFileSync(file, "utf8");
+    } catch (error) {
+      process.stdout.write(`${file}: could not be read: ${error.message}\n`);
+      errors++;
+      continue;
+    }
+    for (const diagram of extractDiagrams(file, text)) {
+      diagrams++;
+      const newer = newerThanGitlab(diagram);
+      if (newer) {
+        process.stdout.write(`${file}:${newer.line}: ${newer.message}\n`);
+        errors++;
+        continue;
+      }
+      try {
+        await mermaid.parse(diagram.source);
+      } catch (error) {
+        const { line, message } = describeError(error, diagram);
+        process.stdout.write(`${file}:${line}: ${message}\n`);
+        errors++;
+      }
+    }
+  }
+  const summary = `diagrams: ${diagrams}, files: ${files.length}`;
+  process.stdout.write(errors ? `Errors: ${errors} (${summary})\n` : `No errors (${summary})\n`);
+  return errors ? 1 : 0;
+}
+
+main().then(
+  (code) => process.exit(code),
+  (error) => fail(String(error?.stack ?? error), 1),
+);

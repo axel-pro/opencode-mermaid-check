@@ -1,0 +1,44 @@
+{
+  "name": "opencode-mermaid-check",
+  "version": "0.1.0",
+  "description": "OpenCode plugin and CLI that checks mermaid diagrams in Markdown against the syntax GitLab renders",
+  "keywords": [
+    "opencode",
+    "opencode-plugin",
+    "mermaid",
+    "gitlab",
+    "lint"
+  ],
+  "homepage": "https://github.com/<github-user>/opencode-mermaid-check#readme",
+  "bugs": {
+    "url": "https://github.com/<github-user>/opencode-mermaid-check/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/<github-user>/opencode-mermaid-check.git"
+  },
+  "license": "MIT",
+  "author": "Mikhail Badin",
+  "main": "src/index.ts",
+  "bin": {
+    "mermaid-check": "bin/mermaid-check"
+  },
+  "files": [
+    "bin",
+    "src"
+  ],
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  },
+  "engines": {
+    "node": ">=22.13.0",
+    "opencode": "^1.18.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "jsdom": "29.1.1",
+    "mermaid": "10.9.8"
+  }
+}
