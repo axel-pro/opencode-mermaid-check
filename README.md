@@ -20,7 +20,7 @@ Add it to the `package.json` of your project and run `npm install`:
 ```json
 {
   "devDependencies": {
-    "opencode-mermaid-check": "github:axel-pro/opencode-mermaid-check#v0.1.0"
+    "opencode-mermaid-check": "github:axel-pro/opencode-mermaid-check#v0.1.1"
   }
 }
 ```
@@ -65,7 +65,7 @@ npx mermaid-check [file or directory ...]
 Without installing, straight from GitHub:
 
 ```bash
-npx github:axel-pro/opencode-mermaid-check#v0.1.0 docs/
+npx github:axel-pro/opencode-mermaid-check#v0.1.1 docs/
 ```
 
 - Checks ` ```mermaid ` and `~~~mermaid` blocks in `.md` files and whole `.mmd` files.
