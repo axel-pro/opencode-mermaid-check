@@ -25,8 +25,8 @@ Add it to the `package.json` of your project and run `npm install`:
 }
 ```
 
-To update, change the tag and run `npm install` again. Releases are listed on the
-[Releases](https://github.com/axel-pro/opencode-mermaid-check/releases) page.
+To update, change the tag and run `npm install` again. Versions are listed on the
+[Tags](https://github.com/axel-pro/opencode-mermaid-check/tags) page.
 
 Requires Node.js 22.13 or newer.
 
@@ -114,8 +114,8 @@ npm version patch   # or minor / major: updates package.json and creates the vX.
 git push --follow-tags
 ```
 
-On the tag, GitHub Actions (`.github/workflows/release.yml`) runs the tests, checks that the tag matches
-the version in `package.json`, and creates a GitHub Release with notes generated from the commits.
+GitHub Actions (`.github/workflows/ci.yml`) runs the tests on Node.js 22 and 24 on every push to `main`
+and on pull requests. There is no release workflow: the tag itself is the release.
 
 ## License
 
