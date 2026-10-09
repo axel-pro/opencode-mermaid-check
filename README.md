@@ -12,18 +12,36 @@ This package catches such diagrams early, in two ways:
 Only syntax is checked, with the official mermaid parser and [jsdom](https://github.com/jsdom/jsdom)
 as the DOM. Nothing is rendered, so no browser is needed.
 
-## OpenCode plugin
+## Installation
 
-Add the package to `opencode.json`; OpenCode installs it and its dependencies on startup:
+The package is not published to npm; npm installs it straight from GitHub, pinned to a release tag.
+Add it to the `package.json` of your project and run `npm install`:
 
 ```json
 {
-  "plugin": ["opencode-mermaid-check@0.1.0"]
+  "devDependencies": {
+    "opencode-mermaid-check": "github:axel-pro/opencode-mermaid-check#v0.1.0"
+  }
 }
 ```
 
-Restart OpenCode after changing the version. Requires Node.js 22.13 or newer in `PATH`: the plugin runs
-the check in a separate `node` process.
+To update, change the tag and run `npm install` again. Releases are listed on the
+[Releases](https://github.com/axel-pro/opencode-mermaid-check/releases) page.
+
+Requires Node.js 22.13 or newer.
+
+## OpenCode plugin
+
+After installation, add the plugin to `opencode.json` by path (relative to `opencode.json`):
+
+```json
+{
+  "plugin": ["./node_modules/opencode-mermaid-check"]
+}
+```
+
+Restart OpenCode after updating the package. Node.js must be in `PATH`: the plugin runs the check
+in a separate `node` process.
 
 Example of what the agent sees after a broken edit:
 
@@ -38,15 +56,16 @@ Errors: 1 (diagrams: 1, files: 1)
 
 ## CLI
 
+After installation:
+
 ```bash
-npx opencode-mermaid-check [file or directory ...]
+npx mermaid-check [file or directory ...]
 ```
 
-Installed as a dependency, the command is `mermaid-check`:
+Without installing, straight from GitHub:
 
 ```bash
-npm install --save-dev opencode-mermaid-check
-npx mermaid-check docs/
+npx github:axel-pro/opencode-mermaid-check#v0.1.0 docs/
 ```
 
 - Checks ` ```mermaid ` and `~~~mermaid` blocks in `.md` files and whole `.mmd` files.
@@ -88,24 +107,15 @@ Tests run the CLI against diagrams in temporary files with the real mermaid from
 
 ## Releasing
 
-Releases are published to npm by GitHub Actions (`.github/workflows/publish.yml`) on a `v*` tag, using
-[trusted publishing](https://docs.npmjs.com/trusted-publishers): no npm token is stored in the
-repository, and npm attaches provenance automatically.
-
-npm allows configuring a trusted publisher only for an existing package, so the first release is manual:
-
-1. `npm login && npm publish`.
-2. On npmjs.com, open the package settings → Trusted Publisher → GitHub Actions, and enter the
-   repository owner, `opencode-mermaid-check` and the workflow file `publish.yml`.
-
-Every following release:
+A release is a `vX.Y.Z` git tag: users pin it in their `package.json`.
 
 ```bash
 npm version patch   # or minor / major: updates package.json and creates the vX.Y.Z tag
 git push --follow-tags
 ```
 
-The workflow runs the tests, checks that the tag matches the version in `package.json`, and publishes.
+On the tag, GitHub Actions (`.github/workflows/release.yml`) runs the tests, checks that the tag matches
+the version in `package.json`, and creates a GitHub Release with notes generated from the commits.
 
 ## License
 
